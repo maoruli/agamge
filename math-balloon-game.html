@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>משחק בלונים מתמטי</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-image: url('background.png');
+            background-size: cover;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        #game-container {
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        #balloon-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .balloon {
+            width: 60px;
+            height: 80px;
+            margin: 10px;
+            border-radius: 50% 50% 50% 50% / 40% 40% 60% 60%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .balloon::after {
+            content: "";
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 1px;
+            height: 20px;
+            background-color: #000;
+        }
+
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #score {
+            font-size: 18px;
+            margin-top: 10px;
+        }
+
+        #victory {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #victory img {
+            width: 200px;
+            margin-bottom: 20px;
+        }
+
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="game-container">
+        <h1>משחק בלונים מתמטי</h1>
+        <div id="start-screen">
+            <input type="text" id="player-name" placeholder="הכנס את שמך">
+            <button id="start-game">התחל משחק</button>
+        </div>
+        <div id="game-screen" style="display: none;">
+            <div id="instructions"></div>
+            <div id="score">נקודות: 0</div>
+            <div id="balloon-container"></div>
+            <button id="next-level" style="display: none;">עבור לשלב הבא</button>
+        </div>
+        <div id="victory" style="display: none;">
+            <img src="victory.png" alt="גביע">
+            <h2>כל הכבוד!</h2>
+            <p>צברת <span id="final-score"></span> נקודות</p>
+            <p>זמן כולל: <span id="total-time"></span> שניות</p>
+            <button id="play-again">שחק שוב</button>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <audio id="success-sound">
+        <source src="sound.mp3" type="audio/mpeg">
+    </audio>
+
+    <script>
+        const startScreen = document.getElementById('start-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const victoryScreen = document.getElementById('victory');
+        const playerNameInput = document.getElementById('player-name');
+        const startGameBtn = document.getElementById('start-game');
+        const nextLevelBtn = document.getElementById('next-level');
+        const playAgainBtn = document.getElementById('play-again');
+        const instructionsElement = document.getElementById('instructions');
+        const scoreElement = document.getElementById('score');
+        const balloonContainer = document.getElementById('balloon-container');
+        const finalScoreElement = document.getElementById('final-score');
+        const totalTimeElement = document.getElementById('total-time');
+        const successSound = document.getElementById('success-sound');
+        const toastElement = document.getElementById('toast');
+
+        let playerName = '';
+        let currentLevel = 0;
+        let score = 0;
+        let startTime;
+        let totalTime = 0;
+        let selectedBalloons = [];
+        let levels = [
+            { target: 10, balloons: 6 },
+            { target: 30, balloons: 10 },
+            { target: 100, balloons: 12 }
+        ];
+
+        const balloonColors = [
+            '#FFFF00', '#40E0D0', '#FF69B4', '#7CFC00', '#FF1493', '#00BFFF',
+            '#FF4500', '#9400D3', '#32CD32', '#FF69B4', '#1E90FF', '#FF8C00'
+        ];
+
+        startGameBtn.addEventListener('click', startGame);
+        nextLevelBtn.addEventListener('click', nextLevel);
+        playAgainBtn.addEventListener('click', restartGame);
+
+        function startGame() {
+            playerName = playerNameInput.value.trim();
+            if (playerName === '') {
+                alert('אנא הכנס את שמך');
+                return;
+            }
+            startScreen.style.display = 'none';
+            gameScreen.style.display = 'block';
+            startTime = Date.now();
+            nextLevel();
+        }
+
+        function nextLevel() {
+            currentLevel++;
+            if (currentLevel > levels.length) {
+                endGame();
+                return;
+            }
+
+            const level = levels[currentLevel - 1];
+            instructionsElement.textContent = `שלב ${currentLevel}: מצא את זוגות הבלונים שסכומם ${level.target}`;
+            createBalloons(level.balloons, level.target);
+            nextLevelBtn.style.display = 'none';
+        }
+
+        function createBalloons(count, target) {
+            balloonContainer.innerHTML = '';
+            const numbers = generateNumbers(count, target);
+            numbers.forEach((number, index) => {
+                const balloon = document.createElement('div');
+                balloon.className = 'balloon';
+                balloon.textContent = number;
+                balloon.style.backgroundColor = balloonColors[index % balloonColors.length];
+                balloon.addEventListener('click', () => selectBalloon(balloon, number, target));
+                balloonContainer.appendChild(balloon);
+            });
+        }
+
+        function generateNumbers(count, target) {
+            const numbers = [];
+            for (let i = 0; i < count / 2; i++) {
+                const num1 = Math.floor(Math.random() * (target - 1)) + 1;
+                const num2 = target - num1;
+                numbers.push(num1, num2);
+            }
+            return shuffleArray(numbers);
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function selectBalloon(balloon, number, target) {
+            if (selectedBalloons.length < 2 && !selectedBalloons.includes(balloon)) {
+                selectedBalloons.push(balloon);
+                balloon.style.opacity = '0.5';
+
+                if (selectedBalloons.length === 2) {
+                    const sum = parseInt(selectedBalloons[0].textContent) + parseInt(selectedBalloons[1].textContent);
+                    if (sum === target) {
+                        score++;
+                        scoreElement.textContent = `נקודות: ${score}`;
+                        selectedBalloons.forEach(b => b.remove());
+                        successSound.play(); // השמעת צליל ההצלחה
+                    } else {
+                        selectedBalloons.forEach(b => b.style.opacity = '1');
+                        showToast('טעות! נסה שוב');
+                    }
+                    selectedBalloons = [];
+
+                    if (balloonContainer.children.length === 0) {
+                        const levelTime = Math.floor((Date.now() - startTime) / 1000);
+                        totalTime += levelTime;
+                        showToast(`כל הכבוד! סיימת את השלב תוך ${levelTime} שניות`);
+                        nextLevelBtn.style.display = 'block';
+                    }
+                }
+            }
+        }
+
+        function endGame() {
+            totalTime += Math.floor((Date.now() - startTime) / 1000);
+            gameScreen.style.display = 'none';
+            victoryScreen.style.display = 'flex';
+            finalScoreElement.textContent = score;
+            totalTimeElement.textContent = totalTime;
+        }
+
+        function restartGame() {
+            currentLevel = 0;
+            score = 0;
+            totalTime = 0;
+            selectedBalloons = [];
+
+            scoreElement.textContent = 'נקודות: 0';
+
+            victoryScreen.style.display = 'none';
+            gameScreen.style.display = 'block';
+
+            startTime = Date.now();
+
+            nextLevel();
+        }
+
+        function showToast(message) {
+            toastElement.textContent = message;
+            toastElement.style.display = 'block';
+            setTimeout(() => {
+                toastElement.style.display = 'none';
+            }, 1000);
+        }
+    </script>
+</body>
+
+</html>
